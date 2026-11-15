@@ -9,9 +9,12 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@cantoo/pdf-lib": "^2.11.1",
     "next": "16.4.6",
+    "plaid": "^51.0.0",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "react-plaid-link": "^5.0.0"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "4.3.3",
