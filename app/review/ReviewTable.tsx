@@ -9,25 +9,25 @@ import { generateDeclaration, type CaseDetails } from '@/lib/fill';
 import { clearAccessToken } from '../actions';
 
 // ---------------------------------------------------------------------------
-// Labels
+// Labels, in form order
 // ---------------------------------------------------------------------------
 
 const ASSET_LABELS: Record<AssetCategory, string> = {
   realEstate: 'Real estate',
-  household: 'Household furniture, appliances',
-  jewelryArt: 'Jewelry, antiques, art',
+  household: 'Household furniture, furnishings, appliances',
+  jewelryArt: 'Jewelry, antiques, art, coin collections',
   vehicles: 'Vehicles, boats, trailers',
   savings: 'Savings accounts',
   checking: 'Checking accounts',
-  otherDepository: 'Credit union, other deposit accounts',
+  otherDepository: 'Credit union, other depository accounts',
   cash: 'Cash',
   taxRefund: 'Tax refund',
-  lifeInsurance: 'Life insurance (cash value)',
-  stocksBonds: 'Stocks, bonds, mutual funds',
+  lifeInsurance: 'Life insurance with cash surrender or loan value',
+  stocksBonds: 'Stocks, bonds, secured notes, mutual funds',
   retirement: 'Retirement and pensions',
-  iraAnnuities: 'IRAs, profit-sharing, annuities',
+  iraAnnuities: 'Profit-sharing, IRAs, deferred compensation, annuities',
   accountsReceivable: 'Accounts receivable, unsecured notes',
-  businessInterests: 'Partnerships, business interests',
+  businessInterests: 'Partnership, other business interests',
   otherAssets: 'Other assets',
 };
 
@@ -39,6 +39,9 @@ const DEBT_LABELS: Record<DebtCategory, string> = {
   creditCards: 'Credit cards',
   otherDebts: 'Other debts',
 };
+
+const ASSET_ORDER = Object.keys(ASSET_LABELS) as AssetCategory[];
+const DEBT_ORDER = Object.keys(DEBT_LABELS) as DebtCategory[];
 
 /** What the form says to attach when served with a Declaration of Disclosure. */
 const ATTACHMENTS: Partial<Record<AssetCategory | DebtCategory, string>> = {
@@ -70,6 +73,51 @@ const usDate = (iso: string) => {
 };
 
 // ---------------------------------------------------------------------------
+// Blank lines
+//
+// The screen shows every item on FL-160. Lines nobody has typed into are
+// "blank": they're left out of the totals, the checks and the PDF. A line stops
+// being blank as soon as it has a description, an amount or a date, and from then
+// on it needs everything a real row needs, including community or separate.
+// ---------------------------------------------------------------------------
+
+function isBlank(row: FormRow): boolean {
+  if (row.description.trim() !== '') return false;
+  return row.kind === 'asset'
+    ? row.grossValue == null && row.debt == null && row.dateAcquired == null
+    : row.totalOwing == null && row.dateIncurred == null;
+}
+
+function blankAsset(category: AssetCategory, id: string): AssetRow {
+  return {
+    id, kind: 'asset', category, source: 'manual', plaidAccountId: null,
+    description: '', dateAcquired: null, grossValue: null, debt: null, character: null, asOf: null, todo: [],
+  };
+}
+
+function blankDebt(category: DebtCategory, id: string): DebtRow {
+  return {
+    id, kind: 'debt', category, source: 'manual', plaidAccountId: null,
+    description: '', dateIncurred: null, totalOwing: null, character: null, asOf: null, todo: [],
+  };
+}
+
+/**
+ * Gives every item that has nothing in it one blank line, so the user sees it and
+ * can fill it in. Items with rows get none: "Add a line" adds more when needed.
+ * How many lines the screen shows doesn't matter to the PDF: allocateRows() puts
+ * filled lines on the printed lines in order and sends extras to FL-161.
+ */
+function padToForm(rows: FormRow[]): FormRow[] {
+  const padded = [...rows];
+  const isEmpty = (category: string) => !rows.some((r) => r.category === category);
+  // Fixed ids, so the server render and the browser agree.
+  for (const category of ASSET_ORDER) if (isEmpty(category)) padded.push(blankAsset(category, `line-${category}`));
+  for (const category of DEBT_ORDER) if (isEmpty(category)) padded.push(blankDebt(category, `line-${category}`));
+  return padded;
+}
+
+// ---------------------------------------------------------------------------
 // Look. A green ledger sheet: pale paper, dark green ink, ruled lines.
 // Colors are CSS variables set on the wrapper in page.tsx.
 // ---------------------------------------------------------------------------
@@ -77,7 +125,7 @@ const usDate = (iso: string) => {
 /** Ledger-line field: no box, just a rule that darkens on hover and turns green on focus. */
 const field =
   'w-full rounded-none border-0 border-b border-[var(--rule)] bg-transparent px-0 py-1.5 text-[var(--ink)] ' +
-  'placeholder:text-[var(--muted)] hover:border-[var(--muted)] ' +
+  'placeholder:text-[var(--muted)]/70 hover:border-[var(--muted)] ' +
   'focus:border-[var(--accent)] focus:outline-none focus:ring-0 focus:shadow-[0_1px_0_0_var(--accent)]';
 const needsInput = 'border-[var(--warn)] shadow-[0_1px_0_0_var(--warn)]';
 const smallLabel = 'block text-xs text-[var(--muted)]';
@@ -96,7 +144,7 @@ interface Download {
 // ---------------------------------------------------------------------------
 
 export function ReviewTable({ initialRows }: { initialRows: FormRow[] }) {
-  const [rows, setRowsState] = useState<FormRow[]>(initialRows);
+  const [rows, setRowsState] = useState<FormRow[]>(() => padToForm(initialRows));
   const [details, setDetailsState] = useState<CaseDetails>({
     petitioner: '', respondent: '', caseNumber: '', filedBy: null,
   });
@@ -147,46 +195,39 @@ export function ReviewTable({ initialRows }: { initialRows: FormRow[] }) {
     });
   }
 
-  function addAsset() {
-    const row: AssetRow = {
-      id: crypto.randomUUID(), kind: 'asset', category: 'household', source: 'manual', plaidAccountId: null,
-      description: '', dateAcquired: null, grossValue: null, debt: null, character: null, asOf: null, todo: [],
-    };
-    setRows((prev) => [...prev, row]);
-  }
-
-  function addDebt() {
-    const row: DebtRow = {
-      id: crypto.randomUUID(), kind: 'debt', category: 'otherDebts', source: 'manual', plaidAccountId: null,
-      description: '', dateIncurred: null, totalOwing: null, character: null, asOf: null, todo: [],
-    };
+  /** One more blank line under an item, for when the printed lines run out (extras go on FL-161). */
+  function addLine(category: AssetCategory | DebtCategory) {
+    const id = crypto.randomUUID();
+    const row = (ASSET_ORDER as string[]).includes(category)
+      ? blankAsset(category as AssetCategory, id)
+      : blankDebt(category as DebtCategory, id);
     setRows((prev) => [...prev, row]);
   }
 
   // -- derived ---------------------------------------------------------------
 
-  const assets = rows.filter((r): r is AssetRow => r.kind === 'asset');
-  const debts = rows.filter((r): r is DebtRow => r.kind === 'debt');
+  /** Everything that will go on the forms. */
+  const filled = rows.filter((r) => !isBlank(r));
 
-  const unclassified = rows.filter((r) => r.character == null).length;
-  const missingValue = rowsMissingValue(rows).length;
-  const missingDescription = rows.filter((r) => r.description.trim() === '').length;
-  const ready = rows.length > 0 && unclassified === 0 && missingValue === 0 && missingDescription === 0;
+  const unclassified = filled.filter((r) => r.character == null).length;
+  const missingValue = rowsMissingValue(filled).length;
+  const missingDescription = filled.filter((r) => r.description.trim() === '').length;
+  const ready = filled.length > 0 && unclassified === 0 && missingValue === 0 && missingDescription === 0;
 
   const blockers = [
-    rows.length === 0 ? 'Add at least one asset or debt' : null,
-    unclassified > 0 ? `${unclassified} ${unclassified === 1 ? 'row needs' : 'rows need'} community or separate` : null,
+    filled.length === 0 ? 'Fill in at least one line' : null,
+    unclassified > 0 ? `${unclassified} ${unclassified === 1 ? 'line needs' : 'lines need'} community or separate` : null,
     missingValue > 0 ? `${missingValue} ${missingValue === 1 ? 'asset needs' : 'assets need'} a value` : null,
     missingDescription > 0
-      ? `${missingDescription} ${missingDescription === 1 ? 'row needs' : 'rows need'} a description`
+      ? `${missingDescription} ${missingDescription === 1 ? 'line needs' : 'lines need'} a description`
       : null,
   ].filter((b): b is string => b != null);
 
   const declarations = (['community', 'separate'] as const)
-    .map((character) => ({ character, allocation: allocateRows(rows.filter((r) => r.character === character)) }))
+    .map((character) => ({ character, allocation: allocateRows(filled.filter((r) => r.character === character)) }))
     .filter((d) => d.allocation.fl160.assets.length + d.allocation.fl160.debts.length > 0);
 
-  const attachments = Array.from(new Set(rows.map((r) => ATTACHMENTS[r.category]).filter(Boolean)));
+  const attachments = Array.from(new Set(filled.map((r) => ATTACHMENTS[r.category]).filter(Boolean)));
 
   /** Fills the court PDFs in the browser and offers them as download links. */
   async function handleGenerate() {
@@ -216,6 +257,118 @@ export function ReviewTable({ initialRows }: { initialRows: FormRow[] }) {
       console.error(err);
       setStatus('error');
     }
+  }
+
+  // -- row renderers ----------------------------------------------------------
+
+  function renderAsset(row: AssetRow) {
+    const blank = isBlank(row);
+    return (
+      <LedgerRow
+        key={row.id}
+        row={row}
+        blank={blank}
+        main={
+          <div className={ASSET_GRID}>
+            <DescriptionInput
+              value={row.description}
+              blank={blank}
+              onChange={(description) => update(row.id, { description })}
+            />
+            <div className="mt-3 grid grid-cols-3 gap-x-4 md:contents">
+              <MoneyInput
+                label="Fair market value"
+                shortLabel="Value"
+                value={row.grossValue}
+                required={!blank}
+                onChange={(grossValue) => update(row.id, { grossValue })}
+              />
+              <MoneyInput
+                label="Debt against it"
+                shortLabel="Debt"
+                value={row.debt}
+                onChange={(debt) => update(row.id, { debt })}
+              />
+              <div>
+                <span className={`${smallLabel} text-right md:hidden`}>Net</span>
+                <p className="py-1.5 text-right font-medium tabular-nums">{blank ? '' : money(netValue(row))}</p>
+              </div>
+            </div>
+          </div>
+        }
+        controls={
+          <RowControls
+            category={
+              <CategorySelect
+                value={row.category}
+                labels={ASSET_LABELS}
+                onChange={(category) => update(row.id, { category })}
+              />
+            }
+            date={
+              <DateInput
+                label="Date acquired"
+                value={row.dateAcquired}
+                onChange={(dateAcquired) => update(row.id, { dateAcquired })}
+              />
+            }
+            character={row.character}
+            onCharacter={(character) => update(row.id, { character })}
+            onDuplicate={() => duplicate(row.id)}
+            onRemove={() => remove(row.id)}
+          />
+        }
+      />
+    );
+  }
+
+  function renderDebt(row: DebtRow) {
+    const blank = isBlank(row);
+    return (
+      <LedgerRow
+        key={row.id}
+        row={row}
+        blank={blank}
+        main={
+          <div className={DEBT_GRID}>
+            <DescriptionInput
+              value={row.description}
+              blank={blank}
+              onChange={(description) => update(row.id, { description })}
+            />
+            <div className="mt-3 md:contents">
+              <MoneyInput
+                label="Total owing"
+                value={row.totalOwing}
+                onChange={(totalOwing) => update(row.id, { totalOwing })}
+              />
+            </div>
+          </div>
+        }
+        controls={
+          <RowControls
+            category={
+              <CategorySelect
+                value={row.category}
+                labels={DEBT_LABELS}
+                onChange={(category) => update(row.id, { category })}
+              />
+            }
+            date={
+              <DateInput
+                label="Date incurred"
+                value={row.dateIncurred}
+                onChange={(dateIncurred) => update(row.id, { dateIncurred })}
+              />
+            }
+            character={row.character}
+            onCharacter={(character) => update(row.id, { character })}
+            onDuplicate={() => duplicate(row.id)}
+            onRemove={() => remove(row.id)}
+          />
+        }
+      />
+    );
   }
 
   // -- render ----------------------------------------------------------------
@@ -271,62 +424,27 @@ export function ReviewTable({ initialRows }: { initialRows: FormRow[] }) {
         <SectionHeading
           id="assets-heading"
           title="Assets"
-          action={<AddButton onClick={addAsset}>Add asset</AddButton>}
+          hint="Every item on the form is listed. Fill in what applies to you; empty lines are left out of the PDF."
         />
         <Sheet>
           <div className={`hidden px-5 py-2 text-xs text-[var(--muted)] ${ASSET_GRID}`}>
-            <span>Item</span>
+            <span>Description</span>
             <span className="text-right">Fair market value</span>
             <span className="text-right">Debt against it</span>
             <span className="text-right">Net</span>
           </div>
-          {assets.map((row) => (
-            <LedgerRow key={row.id} row={row}>
-              <div className={ASSET_GRID}>
-                <DescriptionInput value={row.description} onChange={(description) => update(row.id, { description })} />
-                <div className="mt-3 grid grid-cols-3 gap-x-4 md:contents">
-                  <MoneyInput
-                    label="Fair market value"
-                    shortLabel="Value"
-                    value={row.grossValue}
-                    required
-                    onChange={(grossValue) => update(row.id, { grossValue })}
-                  />
-                  <MoneyInput
-                    label="Debt against it"
-                    shortLabel="Debt"
-                    value={row.debt}
-                    onChange={(debt) => update(row.id, { debt })}
-                  />
-                  <div>
-                    <span className={`${smallLabel} text-right md:hidden`}>Net</span>
-                    <p className="py-1.5 text-right font-medium tabular-nums">{money(netValue(row))}</p>
-                  </div>
-                </div>
-              </div>
-              <RowControls
-                category={
-                  <CategorySelect
-                    value={row.category}
-                    labels={ASSET_LABELS}
-                    onChange={(category) => update(row.id, { category })}
-                  />
-                }
-                date={
-                  <DateInput
-                    label="Date acquired"
-                    value={row.dateAcquired}
-                    onChange={(dateAcquired) => update(row.id, { dateAcquired })}
-                  />
-                }
-                character={row.character}
-                onCharacter={(character) => update(row.id, { character })}
-                onDuplicate={() => duplicate(row.id)}
-                onRemove={() => remove(row.id)}
-              />
-            </LedgerRow>
+          {ASSET_ORDER.map((category) => (
+            <ItemGroup
+              key={category}
+              number={ITEM_NUMBER[category]}
+              label={ASSET_LABELS[category]}
+              onAddLine={() => addLine(category)}
+            >
+              {rows
+                .filter((r): r is AssetRow => r.kind === 'asset' && r.category === category)
+                .map(renderAsset)}
+            </ItemGroup>
           ))}
-          {assets.length === 0 && <Empty>No assets yet. Add one to start this side of the declaration.</Empty>}
         </Sheet>
       </section>
 
@@ -336,48 +454,24 @@ export function ReviewTable({ initialRows }: { initialRows: FormRow[] }) {
           id="debts-heading"
           title="Debts"
           hint="A loan secured by a house or car belongs in “Debt against it” on that asset, not here."
-          action={<AddButton onClick={addDebt}>Add debt</AddButton>}
         />
         <Sheet>
           <div className={`hidden px-5 py-2 text-xs text-[var(--muted)] ${DEBT_GRID}`}>
-            <span>Item and who it’s owed to</span>
+            <span>Description and who it’s owed to</span>
             <span className="text-right">Total owing</span>
           </div>
-          {debts.map((row) => (
-            <LedgerRow key={row.id} row={row}>
-              <div className={DEBT_GRID}>
-                <DescriptionInput value={row.description} onChange={(description) => update(row.id, { description })} />
-                <div className="mt-3 md:contents">
-                  <MoneyInput
-                    label="Total owing"
-                    value={row.totalOwing}
-                    onChange={(totalOwing) => update(row.id, { totalOwing })}
-                  />
-                </div>
-              </div>
-              <RowControls
-                category={
-                  <CategorySelect
-                    value={row.category}
-                    labels={DEBT_LABELS}
-                    onChange={(category) => update(row.id, { category })}
-                  />
-                }
-                date={
-                  <DateInput
-                    label="Date incurred"
-                    value={row.dateIncurred}
-                    onChange={(dateIncurred) => update(row.id, { dateIncurred })}
-                  />
-                }
-                character={row.character}
-                onCharacter={(character) => update(row.id, { character })}
-                onDuplicate={() => duplicate(row.id)}
-                onRemove={() => remove(row.id)}
-              />
-            </LedgerRow>
+          {DEBT_ORDER.map((category) => (
+            <ItemGroup
+              key={category}
+              number={ITEM_NUMBER[category]}
+              label={DEBT_LABELS[category]}
+              onAddLine={() => addLine(category)}
+            >
+              {rows
+                .filter((r): r is DebtRow => r.kind === 'debt' && r.category === category)
+                .map(renderDebt)}
+            </ItemGroup>
           ))}
-          {debts.length === 0 && <Empty>No debts yet.</Empty>}
         </Sheet>
       </section>
 
@@ -411,14 +505,14 @@ export function ReviewTable({ initialRows }: { initialRows: FormRow[] }) {
                   {allocation.needsContinuation && (
                     <p className="mt-3 text-sm text-[var(--muted)]">
                       {allocation.fl161.assets.length + allocation.fl161.debts.length === 1
-                        ? '1 row doesn’t'
-                        : `${allocation.fl161.assets.length + allocation.fl161.debts.length} rows don’t`}{' '}
+                        ? '1 line doesn’t'
+                        : `${allocation.fl161.assets.length + allocation.fl161.debts.length} lines don’t`}{' '}
                       fit on the main form and will go on a continuation sheet (FL-161).
                     </p>
                   )}
                   {allocation.unplaced.length > 0 && (
                     <p className="mt-3 text-sm text-[var(--warn)]">
-                      {allocation.unplaced.length} row(s) don’t fit on either form and will be left out.
+                      {allocation.unplaced.length} line(s) don’t fit on either form and will be left out.
                     </p>
                   )}
                 </div>
@@ -468,7 +562,10 @@ export function ReviewTable({ initialRows }: { initialRows: FormRow[] }) {
                 The PDF couldn’t be generated. Open the browser console to see the error, then try again.
               </p>
             ) : ready ? (
-              <p>Every row is complete. You sign the form under penalty of perjury, so check each amount first.</p>
+              <p>
+                {filled.length} {filled.length === 1 ? 'line' : 'lines'} ready. You sign the form under penalty of
+                perjury, so check each amount first.
+              </p>
             ) : (
               <ul className="space-y-0.5 text-[var(--warn)]">
                 {blockers.map((b) => (
@@ -496,53 +593,62 @@ export function ReviewTable({ initialRows }: { initialRows: FormRow[] }) {
 // Pieces
 // ---------------------------------------------------------------------------
 
-function SectionHeading({
-  id, title, hint, action,
-}: { id: string; title: string; hint?: string; action?: ReactNode }) {
+function SectionHeading({ id, title, hint }: { id: string; title: string; hint?: string }) {
   return (
-    <div className="mb-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
-      <div>
-        <h2 id={id} className="text-xl font-semibold tracking-tight">
-          {title}
-        </h2>
-        {hint && <p className="mt-0.5 max-w-prose text-sm text-[var(--muted)]">{hint}</p>}
-      </div>
-      {action}
+    <div className="mb-4">
+      <h2 id={id} className="text-xl font-semibold tracking-tight">
+        {title}
+      </h2>
+      {hint && <p className="mt-0.5 max-w-prose text-sm text-[var(--muted)]">{hint}</p>}
     </div>
-  );
-}
-
-function AddButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="cursor-pointer rounded-sm border border-[var(--ink)] px-3.5 py-1.5 text-sm font-medium hover:bg-[var(--ink)] hover:text-[var(--paper)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-    >
-      {children}
-    </button>
   );
 }
 
 /** The white sheet the ledger rows sit on. */
 function Sheet({ children }: { children: ReactNode }) {
+  return <div className="border-y border-[var(--ink)] bg-[var(--sheet)]">{children}</div>;
+}
+
+/** One numbered item from the form, with its lines underneath. */
+function ItemGroup({
+  number, label, onAddLine, children,
+}: { number: number; label: string; onAddLine: () => void; children: ReactNode }) {
   return (
-    <div className="divide-y divide-[var(--rule)] border-y border-[var(--ink)] bg-[var(--sheet)]">{children}</div>
+    <div className="border-t border-[var(--rule)] first:border-t-0">
+      <div className="flex items-baseline justify-between gap-4 bg-[var(--paper)]/60 px-5 pb-1.5 pt-4">
+        <h3 className="font-semibold">
+          <span className="tabular-nums text-[var(--muted)]">{number}.</span> {label}
+        </h3>
+        <button
+          type="button"
+          onClick={onAddLine}
+          className="shrink-0 cursor-pointer text-sm text-[var(--accent)] underline underline-offset-2 hover:text-[var(--ink)]"
+        >
+          Add a line
+        </button>
+      </div>
+      <div className="divide-y divide-[var(--rule)]">{children}</div>
+    </div>
   );
 }
 
-function Empty({ children }: { children: ReactNode }) {
-  return <p className="px-5 py-6 text-[var(--muted)]">{children}</p>;
-}
-
-/** One line of the ledger. The left edge is amber until the row has everything it needs. */
-function LedgerRow({ row, children }: { row: FormRow; children: ReactNode }) {
+/**
+ * One line of the ledger. A blank line shows only its description and amounts;
+ * once anything is typed it grows a second line with date, property type and
+ * actions. The first line keeps the same elements either way, so typing never
+ * loses focus.
+ */
+function LedgerRow({
+  row, blank, main, controls,
+}: { row: FormRow; blank: boolean; main: ReactNode; controls: ReactNode }) {
   const incomplete =
-    row.character == null || row.description.trim() === '' || (row.kind === 'asset' && row.grossValue == null);
+    !blank &&
+    (row.character == null || row.description.trim() === '' || (row.kind === 'asset' && row.grossValue == null));
   return (
-    <div className={`border-l-4 px-5 py-4 ${incomplete ? 'border-l-[var(--warn)]' : 'border-l-transparent'}`}>
-      {children}
-      {(row.asOf != null || row.todo.length > 0) && (
+    <div className={`border-l-4 px-5 ${blank ? 'py-2' : 'py-4'} ${incomplete ? 'border-l-[var(--warn)]' : 'border-l-transparent'}`}>
+      {main}
+      {!blank && controls}
+      {!blank && (row.asOf != null || row.todo.length > 0) && (
         <p className="mt-3 text-xs leading-relaxed">
           {row.asOf != null && (
             <span className="text-[var(--muted)]">Balance from your linked account on {usDate(row.asOf)}. </span>
@@ -558,13 +664,15 @@ function LedgerRow({ row, children }: { row: FormRow; children: ReactNode }) {
   );
 }
 
-function DescriptionInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function DescriptionInput({
+  value, blank, onChange,
+}: { value: string; blank: boolean; onChange: (v: string) => void }) {
   return (
     <input
       type="text"
       aria-label="Description"
-      placeholder="Describe this item"
-      className={`${field} text-base font-medium ${value.trim() === '' ? needsInput : ''}`}
+      placeholder={blank ? 'Blank line' : 'Describe this item'}
+      className={`${field} text-base ${blank ? '' : 'font-medium'} ${!blank && value.trim() === '' ? needsInput : ''}`}
       value={value}
       onChange={(e) => onChange(e.target.value)}
     />
@@ -638,9 +746,7 @@ function CharacterToggle({ value, onChange }: { value: Character | null; onChang
   ];
   return (
     <div>
-      <span className={smallLabel} id="ptype-label">
-        Property type
-      </span>
+      <span className={smallLabel}>Property type</span>
       <div
         role="group"
         aria-label="Property type"

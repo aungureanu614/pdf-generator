@@ -7,6 +7,8 @@ import { mapPlaidToRows, type FormRow } from '@/lib/mapping';
 import { PlaidLinkButton } from '@/app/components/PlaidLinkButton';
 import { setAccessToken } from '@/app/actions';
 import { ReviewTable } from './review/ReviewTable';
+import Link from 'next/link';
+import { theme } from '@/lib/theme';
 
 export async function LinkSection() {
   await connection();
@@ -63,23 +65,28 @@ async function Review() {
   return <ReviewTable initialRows={rows} />;
 }
 
-const theme = {
-  '--paper': '#F1F5EF',
-  '--sheet': '#FFFFFF',
-  '--ink': '#14231B',
-  '--muted': '#55665C',
-  '--rule': '#D3DDD4',
-  '--accent': '#1E5E45',
-  '--warn': '#A8530A',
-  colorScheme: 'light',
-} as React.CSSProperties;
-
 export default function Home() {
   return (
     <div style={theme} className="min-h-screen w-full flex-1 bg-[var(--paper)] font-sans text-[var(--ink)]">
       <main className="mx-auto w-full max-w-5xl px-6 pt-12">
         <header className="mb-12 border-b border-[var(--ink)] pb-8">
-          <p className="text-sm text-[var(--muted)]">Form FL-160, for service with a Declaration of Disclosure</p>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+            <p className="text-sm text-[var(--muted)]">Form FL-160, for service with a Declaration of Disclosure</p>
+            <div className="flex gap-2">
+              <Link
+                href="/future-features"
+                className="rounded-sm border border-[var(--ink)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--ink)] hover:text-[var(--paper)]"
+              >
+                Future features
+              </Link>
+              <Link
+                href="/questions"
+                className="rounded-sm border border-[var(--ink)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--ink)] hover:text-[var(--paper)]"
+              >
+                Questions for a lawyer
+              </Link>
+            </div>
+          </div>
           <h1 className="mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">Review your property declaration</h1>
           <p className="mt-4 max-w-prose text-[var(--muted)]">
             Balances came from your linked accounts. Check every row, fill in what’s missing, and mark each item as
