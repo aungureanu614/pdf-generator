@@ -3,6 +3,14 @@
 import { cookies } from 'next/headers';
 import { plaidClient } from '@/lib/plaid';
 
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path: '/',
+  maxAge: 60 * 60 * 4, // the browser deletes it after 4 hours
+};
+
 export async function setAccessToken(publicToken: string) {
   try {
     const response = await plaidClient.itemPublicTokenExchange({
@@ -10,11 +18,7 @@ export async function setAccessToken(publicToken: string) {
     });
 
     const cookieStore = await cookies();
-    cookieStore.set('plaid_access_token', response.data.access_token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      path: '/',
-    });
+    cookieStore.set('plaid_access_token', response.data.access_token, COOKIE_OPTIONS);
 
     return { ok: true };
   } catch (err: any) {
@@ -23,8 +27,7 @@ export async function setAccessToken(publicToken: string) {
   }
 }
 
-// TODO: wire this up later
-export async function deleteCookie(cookieName: string) {
-    const cookieStore = await cookies();
-    cookieStore.delete(cookieName);
+export async function clearAccessToken() {
+  const cookieStore = await cookies();
+  cookieStore.delete('plaid_access_token');
 }

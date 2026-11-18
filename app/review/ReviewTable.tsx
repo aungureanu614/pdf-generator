@@ -6,6 +6,7 @@ import { ITEM_NUMBER, type AssetCategory, type DebtCategory } from '@/lib/fl160-
 import { netValue, type AssetRow, type Character, type DebtRow, type FormRow } from '@/lib/mapping';
 import { allocateRows, rowsMissingValue } from '@/lib/allocate';
 import { generateDeclaration, type CaseDetails } from '@/lib/fill';
+import { clearAccessToken } from '../actions';
 
 // ---------------------------------------------------------------------------
 // Labels
@@ -221,9 +222,10 @@ export function ReviewTable({ initialRows }: { initialRows: FormRow[] }) {
 
   return (
     <div className="space-y-12 pb-10">
+       <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded cursor-pointer" onClick={clearAccessToken}>Start Over</button>
       {/* Case details ------------------------------------------------------- */}
       <section aria-labelledby="case-heading">
-        <SectionHeading id="case-heading" title="Case details" hint="Optional. Printed at the top of each form." />
+        <SectionHeading id="case-heading" title="Case details" />
         <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
           <label>
             <span className={smallLabel}>Petitioner</span>
@@ -479,7 +481,8 @@ export function ReviewTable({ initialRows }: { initialRows: FormRow[] }) {
             type="button"
             onClick={handleGenerate}
             disabled={!ready || status === 'working'}
-            className="rounded-sm bg-[var(--accent)] px-5 py-2.5 font-semibold text-white enabled:cursor-pointer enabled:hover:bg-[var(--ink)] disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+            // className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded cursor-pointer"
+            className="bg-blue-500 hover:bg-blue-700 rounded-sm bg-[var(--accent)] px-5 py-2.5 font-semibold text-white enabled:cursor-pointer enabled:hover:bg-blue-700 disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
           >
             {status === 'working' ? 'Generating…' : 'Generate PDF'}
           </button>
