@@ -89,7 +89,7 @@ export default function Home() {
           </div>
           <h1 className="mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">Review your property declaration</h1>
           <p className="mt-4 max-w-prose text-[var(--muted)]">
-            Balances came from your linked accounts. Check every row, fill in what’s missing, and mark each item as
+            Link your accounts to pull in balances. Check every row, fill in what’s missing, and mark each item as
             community or separate. Descriptions, dates and amounts go on the form; the proposed division is left blank.
             Nothing is saved, so leaving this page discards your edits.
           </p>
