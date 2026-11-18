@@ -134,6 +134,11 @@ const smallLabel = 'block text-xs text-[var(--muted)]';
 const ASSET_GRID = 'md:grid md:grid-cols-[minmax(0,1fr)_9.5rem_9.5rem_8.5rem] md:gap-x-6';
 const DEBT_GRID = 'md:grid md:grid-cols-[minmax(0,1fr)_9.5rem] md:gap-x-6';
 
+/** ["a", "b", "c"] → "a, b and c". */
+function joinList(items: string[]): string {
+  return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
 interface Download {
   name: string;
   url: string;
@@ -209,12 +214,26 @@ export function ReviewTable({ initialRows }: { initialRows: FormRow[] }) {
   /** Everything that will go on the forms. */
   const filled = rows.filter((r) => !isBlank(r));
 
+  /** Case details still empty, named as the user sees them. */
+  const missingDetails = [
+    details.petitioner.trim() === '' ? 'petitioner' : null,
+    details.respondent.trim() === '' ? 'respondent' : null,
+    details.caseNumber.trim() === '' ? 'case number' : null,
+    details.filedBy == null ? 'whose declaration' : null,
+  ].filter((d): d is string => d != null);
+
   const unclassified = filled.filter((r) => r.character == null).length;
   const missingValue = rowsMissingValue(filled).length;
   const missingDescription = filled.filter((r) => r.description.trim() === '').length;
-  const ready = filled.length > 0 && unclassified === 0 && missingValue === 0 && missingDescription === 0;
+  const ready =
+    filled.length > 0 &&
+    missingDetails.length === 0 &&
+    unclassified === 0 &&
+    missingValue === 0 &&
+    missingDescription === 0;
 
   const blockers = [
+    missingDetails.length > 0 ? `Case details missing: ${joinList(missingDetails)}` : null,
     filled.length === 0 ? 'Fill in at least one line' : null,
     unclassified > 0 ? `${unclassified} ${unclassified === 1 ? 'line needs' : 'lines need'} community or separate` : null,
     missingValue > 0 ? `${missingValue} ${missingValue === 1 ? 'asset needs' : 'assets need'} a value` : null,
@@ -383,7 +402,7 @@ export function ReviewTable({ initialRows }: { initialRows: FormRow[] }) {
           <label>
             <span className={smallLabel}>Petitioner</span>
             <input
-              className={field}
+              className={`${field} ${details.petitioner.trim() === '' ? needsInput : ''}`}
               value={details.petitioner}
               onChange={(e) => setDetails({ petitioner: e.target.value })}
             />
@@ -391,7 +410,7 @@ export function ReviewTable({ initialRows }: { initialRows: FormRow[] }) {
           <label>
             <span className={smallLabel}>Respondent</span>
             <input
-              className={field}
+              className={`${field} ${details.respondent.trim() === '' ? needsInput : ''}`}
               value={details.respondent}
               onChange={(e) => setDetails({ respondent: e.target.value })}
             />
@@ -399,7 +418,7 @@ export function ReviewTable({ initialRows }: { initialRows: FormRow[] }) {
           <label>
             <span className={smallLabel}>Case number</span>
             <input
-              className={field}
+              className={`${field} ${details.caseNumber.trim() === '' ? needsInput : ''}`}
               value={details.caseNumber}
               onChange={(e) => setDetails({ caseNumber: e.target.value })}
             />
@@ -407,11 +426,13 @@ export function ReviewTable({ initialRows }: { initialRows: FormRow[] }) {
           <label>
             <span className={smallLabel}>Whose declaration is this?</span>
             <select
-              className={field}
+              className={`${field} ${details.filedBy == null ? needsInput : ''}`}
               value={details.filedBy ?? ''}
               onChange={(e) => setDetails({ filedBy: (e.target.value || null) as CaseDetails['filedBy'] })}
             >
-              <option value="">Not chosen</option>
+              <option value="" disabled>
+                Choose…
+              </option>
               <option value="petitioner">Petitioner’s</option>
               <option value="respondent">Respondent’s</option>
             </select>

@@ -1,3 +1,7 @@
+// app/questions/page.tsx
+// Questions for a family law attorney that came up while building the prototype.
+// Each one notes what the prototype does today, so the answer can change it.
+
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { theme } from '@/lib/theme';
@@ -28,7 +32,7 @@ const GROUPS: Array<{ title: string; questions: Question[] }> = [
       },
       {
         ask: 'Should one of the “Petitioner’s” and “Respondent’s” boxes always be ticked?',
-        now: 'Optional. Left blank, neither box is ticked.',
+        now: 'Required: the PDF can’t be generated until one is chosen.',
       },
       {
         ask: 'Is one line per investment or retirement account, at its total balance, enough? Or should holdings be listed separately?',
