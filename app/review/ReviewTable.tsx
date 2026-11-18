@@ -252,15 +252,15 @@ export function ReviewTable({ initialRows }: { initialRows: FormRow[] }) {
             />
           </label>
           <label>
-            <span className={smallLabel}>This is the declaration of the</span>
+            <span className={smallLabel}>Whose declaration is this?</span>
             <select
               className={field}
               value={details.filedBy ?? ''}
               onChange={(e) => setDetails({ filedBy: (e.target.value || null) as CaseDetails['filedBy'] })}
             >
-              <option value="">Leave blank</option>
-              <option value="petitioner">Petitioner</option>
-              <option value="respondent">Respondent</option>
+              <option value="">Not chosen</option>
+              <option value="petitioner">Petitioner’s</option>
+              <option value="respondent">Respondent’s</option>
             </select>
           </label>
         </div>
