@@ -60,11 +60,11 @@ const GROUPS: Array<{ title: string; questions: Question[] }> = [
         now: 'Does this, flagged as needing a value and date.',
       },
       {
-        ask: 'When there is one property, is it reasonable to add a home equity line to that property’s debt automatically?',
+        ask: 'Plaid doesn’t say which property a home equity line is secured by. When the user has only one property, is it reasonable for the app to assume it’s that one and add the balance to its debt?',
         now: 'Does this, with a note asking the user to confirm.',
       },
       {
-        ask: 'Business accounts can come through with a personal bank link. How should they be handled?',
+        ask: 'When someone links their bank, Plaid also returns any business accounts held there, such as a business credit card. Should those be listed like personal accounts, counted as part of the business under item 15, or left off?',
         now: 'Includes them with a note asking the user to confirm they belong.',
       },
     ],
